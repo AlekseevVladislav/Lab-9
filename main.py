@@ -1,49 +1,45 @@
-import flask
+from flask import Flask, render_template, request, redirect, session
 from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime
 
-
-app = flask.Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:123@localhost/test_db7'
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sp.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-
-class Message(db.Model):
+class Note(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.String(512), nullable=False)
+    importance = db.Column(db.String(20), nullable=False)
+    text = db.Column(db.Text, nullable=False)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def __init__(self, text, tags):
-        self.text = text
-        self.tags = [
-            Tag(text=tag) for tag in tags.split(',')
-        ]
-
-
-class Tag(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    text = db.Column(db.String(32), nullable=False)
-
-    message_id = db.Column(db.Integer, db.ForeignKey('message.id'), nullable=False)
-    message = db.relationship('Message', backref=db.backref('tags', lazy=True))
-
-
-@app.route('/', methods=['GET'])
-def hello():
-    return flask.render_template('index.html', messages=Message.query.all())
-
-
-@app.route('/add_message', methods=['POST'])
-def add_message():
-    text = flask.request.form['text']
-    tag = flask.request.form['tag']
-    # messages.append(Message(text, tag))
-    db.session.add(Message(text, tag))
-    db.session.commit()
-
-    return flask.redirect(flask.url_for('hello'))
+    def repr(self):
+        return '<Note %r>' % self.id
 
 
 
+@app.route('/')
+@app.route('/notes', methods=['POST', 'GET'])
+def notes():
+    if request.method == 'POST':
+        importance = request.form['importance']
+        text = request.form['text']
+        note = Note(importance=importance, text=text)
+        try:
+            db.session.add(note)
+            db.session.commit()
+            return redirect('/list')
+        except:
+            return 'Error'
+    else:
+        return render_template('notes.html')
 
-with app.app_context():
-    db.create_all()
-app.run()
+
+@app.route('/list')
+def list():
+    lists = Note.query.order_by(Note.date.desc()).all()
+    return render_template("list.html", list=lists)
+
+
+if __name__ == '__main__':
+    app.run(debug=True)
